@@ -90,5 +90,16 @@ pipeline {
         sh "docker rm --force smokerun"
       }
     }
+    stage('Stage IX: Trigger CD Pipeline') {
+      steps {
+        echo "Triggering CD job after successful CI build"
+        build job: 'springboot-cd-pipeline',
+          wait: false,
+          parameters: [
+            string(name: 'IMAGETAG', value: "${env.imageTag}"),
+            string(name: 'environment', value: "${params.ENV}")
+          ]
+      }
+    }
   }
 }
