@@ -1,10 +1,16 @@
-
 pipeline {
   agent { label 'build' }
-   environment { 
-        registry = "arjunpt/democicd" 
-        registryCredential = 'dockerhub' 
-   }
+
+  parameters {
+    choice(name: 'ENV', choices: ['dev', 'qa', 'prod'], description: 'Select environment')
+    string(name: 'VERSION', defaultValue: '1.1', description: 'Enter version')
+  }
+
+  environment { 
+    registry = "arjunpt/democicd" 
+    registryCredential = 'dockerhub' 
+    imageTag = "${params.ENV}-${params.VERSION}"
+  }
 
   stages {
     stage('Checkout') {
@@ -12,78 +18,77 @@ pipeline {
         git branch: 'main', credentialsId: 'GitlabCred', url: 'https://gitlab.com/learndevopseasy/devsecops/springboot-build-pipeline.git'
       }
     }
-  
-   stage('Stage I: Build') {
+
+    stage('Stage I: Build') {
       steps {
         echo "Building Jar Component ..."
-        sh "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64; mvn clean package "
+        sh "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64; mvn clean package"
       }
     }
 
-   stage('Stage II: Code Coverage ') {
+    stage('Stage II: Code Coverage') {
       steps {
-	    echo "Running Code Coverage ..."
+        echo "Running Code Coverage ..."
         sh "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64; mvn jacoco:report"
       }
     }
 
-   stage('Stage III: SCA') {
-      steps { 
-        echo "Running Software Composition Analysis using OWASP Dependency-Check ..."
+    stage('Stage III: SCA') {
+      steps {
+        echo "Running OWASP Dependency-Check ..."
         sh "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64; mvn org.owasp:dependency-check-maven:check"
       }
     }
 
-   stage('Stage IV: SAST') {
-      steps { 
-        echo "Running Static application security testing using SonarQube Scanner ..."
+    stage('Stage IV: SAST') {
+      steps {
+        echo "Running SonarQube Scanner ..."
         withSonarQubeEnv('mysonarqube') {
-            sh 'mvn sonar:sonar -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml -Dsonar.dependencyCheck.jsonReportPath=target/dependency-check-report.json -Dsonar.dependencyCheck.htmlReportPath=target/dependency-check-report.html -Dsonar.projectName=wezvatech'
-       }
+          sh 'mvn sonar:sonar -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml -Dsonar.dependencyCheck.jsonReportPath=target/dependency-check-report.json -Dsonar.dependencyCheck.htmlReportPath=target/dependency-check-report.html -Dsonar.projectName=wezvatech'
+        }
       }
     }
 
-   stage('Stage V: QualityGates') {
-      steps { 
-        echo "Running Quality Gates to verify the code quality"
+    stage('Stage V: Quality Gates') {
+      steps {
+        echo "Waiting for Quality Gate result ..."
         script {
           timeout(time: 1, unit: 'MINUTES') {
             def qg = waitForQualityGate()
             if (qg.status != 'OK') {
               error "Pipeline aborted due to quality gate failure: ${qg.status}"
             }
-           }
+          }
         }
       }
-    }
-   
-   stage('Stage VI: Build Image') {
-      steps { 
-        echo "Build Docker Image"
-        script {
-               docker.withRegistry( '', registryCredential ) { 
-                 myImage = docker.build registry
-                 myImage.push()
-                }
-        }
-      }
-    }
-        
-   stage('Stage VII: Scan Image ') {
-      steps { 
-        echo "Scanning Image for Vulnerabilities"
-        sh "trivy image --scanners vuln --offline-scan adamtravis/democicd:latest > trivyresults.txt"
-        }
-    }
-          
-   stage('Stage VIII: Smoke Test ') {
-      steps { 
-        echo "Smoke Test the Image"
-        sh "docker run -d --name smokerun -p 8080:8080 adamtravis/democicd"
-        sh "sleep 90; ./check.sh"
-        sh "docker rm --force smokerun"
-        }
     }
 
+    stage('Stage VI: Build Image') {
+      steps {
+        script {
+          echo "Building Docker Image with tag: ${env.imageTag}"
+          docker.withRegistry('', registryCredential) {
+            def image = docker.build("${registry}:${env.imageTag}")
+            image.push()
+          }
+        }
+      }
+    }
+
+    stage('Stage VII: Scan Image') {
+      steps {
+        echo "Scanning Docker Image for Vulnerabilities"
+        sh "trivy image --scanners vuln --offline-scan ${registry}:${env.imageTag} > trivyresults.txt"
+      }
+    }
+
+    stage('Stage VIII: Smoke Test') {
+      steps {
+        echo "Smoke Testing the Docker Image"
+        sh "docker run -d --name smokerun -p 8080:8080 ${registry}:${env.imageTag}"
+        sh "sleep 90; ./check.sh"
+        sh "docker rm --force smokerun"
+      }
+    }
   }
 }
