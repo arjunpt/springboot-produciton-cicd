@@ -1,45 +1,38 @@
 pipeline {
   agent { label 'build' }
-
   parameters {
     string(name: 'environment', defaultValue: 'dev', description: 'Enter environment')
     string(name: 'VERSION', defaultValue: '1.1', description: 'Enter version')
   }
-
   environment { 
     registry = "arjunpt/democicd" 
     registryCredential = 'dockerhub' 
-    imageTag = "${params.ENV}-${params.VERSION}"
+    imageTag = "${params.environment}-${params.VERSION}"
   }
-
   stages {
     stage('Checkout') {
       steps {
         git branch: 'main', credentialsId: 'GitlabCred', url: 'https://gitlab.com/learndevopseasy/devsecops/springboot-build-pipeline.git'
       }
     }
-
     stage('Stage I: Build') {
       steps {
         echo "Building Jar Component ..."
         sh "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64; mvn clean package"
       }
     }
-
     stage('Stage II: Code Coverage') {
       steps {
         echo "Running Code Coverage ..."
         sh "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64; mvn jacoco:report"
       }
     }
-
     stage('Stage III: SCA') {
       steps {
         echo "Running OWASP Dependency-Check ..."
         sh "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64; mvn org.owasp:dependency-check-maven:check"
       }
     }
-
     stage('Stage IV: SAST') {
       steps {
         echo "Running SonarQube Scanner ..."
@@ -48,7 +41,6 @@ pipeline {
         }
       }
     }
-
     stage('Stage V: Quality Gates') {
       steps {
         echo "Waiting for Quality Gate result ..."
@@ -62,7 +54,6 @@ pipeline {
         }
       }
     }
-
     stage('Stage VI: Build Image') {
       steps {
         script {
@@ -74,14 +65,12 @@ pipeline {
         }
       }
     }
-
     stage('Stage VII: Scan Image') {
       steps {
         echo "Scanning Docker Image for Vulnerabilities"
         sh "trivy image --scanners vuln --offline-scan ${registry}:${env.imageTag} > trivyresults.txt"
       }
     }
-
     stage('Stage VIII: Smoke Test') {
       steps {
         echo "Smoke Testing the Docker Image"
@@ -93,13 +82,14 @@ pipeline {
     stage('Stage IX: Trigger CD Pipeline') {
       steps {
         script {
-          def tag = "${params.ENV}-${params.VERSION}"
+          def tag = "${params.environment}-${params.VERSION}"
           echo "Triggering CD job after successful CI build"
           build job: 'springboot-cd-pipeline', 
             parameters: [
               string(name: 'IMAGETAG', value: tag),
-              string(name: 'environment', value: params.ENV)
+              string(name: 'environment', value: params.environment)
             ]
+        }
       }
     }
   }
