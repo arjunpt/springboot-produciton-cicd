@@ -2,7 +2,7 @@ pipeline {
   agent { label 'build' }
 
   parameters {
-    choice(name: 'ENV', choices: ['dev', 'qa', 'prod'], description: 'Select environment')
+    string(name: 'environment', defaultValue: 'dev', description: 'Enter environment')
     string(name: 'VERSION', defaultValue: '1.1', description: 'Enter version')
   }
 
