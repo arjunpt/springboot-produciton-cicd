@@ -86,8 +86,8 @@ pipeline {
           echo "Triggering CD job after successful CI build"
           build job: 'springboot-cd-pipeline', 
             parameters: [
-              [$class: 'StringParameterValue', name: 'IMAGETAG', value: tag],
-              [$class: 'ChoiceParameterValue', name: 'environment', value: params.environment]
+              string(name: 'IMAGETAG', value: tag),
+              string(name: 'environment', value: params.environment)
             ]
         }
       }
