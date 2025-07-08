@@ -98,8 +98,8 @@ pipeline {
           build job: 'springboot-cd-pipeline', 
             parameters: [
               string(name: 'IMAGETAG', value: tag),
-              string(name: 'environment', value: params.ENV))
-              ]
+              string(name: 'environment', value: params.ENV)
+            ]
       }
     }
   }
